@@ -21,14 +21,23 @@ app.get('/api/savings', async (req, res) => {
         headers: {
           Authorization: `Basic ${auth}`,
         },
+        responseType: 'text'  // Get raw text response
       }
     );
 
-    res.json(response.data);
+    // Set the correct content type
+    res.setHeader('Content-Type', 'application/xml');
+    // Send the raw XML
+    res.send(response.data);
   } catch (error) {
     console.error('Error fetching data:', error);
     res.status(500).json({ error: 'Failed to fetch data' });
   }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 app.listen(port, () => {
