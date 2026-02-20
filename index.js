@@ -8,34 +8,48 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 
-// Basic authentication for Finansportalen API
-const auth = Buffer.from(
-  `${process.env.FEED_USERNAME}:${process.env.FEED_PASSWORD}`
-).toString('base64');
+const TOKEN_URL = 'https://finans-api.forbrukerradet.no/auth/token';
+const DEPOSITS_URL = 'https://finans-api.forbrukerradet.no/feed/bank-deposits/all';
+
+let cachedToken = null;
+let tokenExpiresAt = 0;
+
+async function getAccessToken() {
+  if (cachedToken && Date.now() < tokenExpiresAt) {
+    return cachedToken;
+  }
+
+  const response = await axios.post(TOKEN_URL, {
+    grantType: 'external_consumer',
+    clientId: process.env.FINANSPORTALEN_CLIENT_ID,
+    clientSecret: process.env.FINANSPORTALEN_CLIENT_SECRET,
+  }, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  cachedToken = response.data.accessToken;
+  tokenExpiresAt = Date.now() + (response.data.expiresIn - 60) * 1000;
+  return cachedToken;
+}
 
 app.get('/api/savings', async (req, res) => {
   try {
-    const response = await axios.get(
-      'https://www.finansportalen.no/services/feed/v3/bank/banksparing.atom',
-      {
-        headers: {
-          Authorization: `Basic ${auth}`,
-        },
-        responseType: 'text'  // Get raw text response
-      }
-    );
+    const token = await getAccessToken();
+    const response = await axios.get(DEPOSITS_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-    // Set the correct content type
-    res.setHeader('Content-Type', 'application/xml');
-    // Send the raw XML
-    res.send(response.data);
+    res.json(response.data);
   } catch (error) {
-    console.error('Error fetching data:', error);
+    console.error('Error fetching data:', error.message);
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Data:', error.response.data);
+    }
     res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
